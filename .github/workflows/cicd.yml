@@ -43,8 +43,8 @@ jobs:
       - name: Closing statement
         run: |
           echo ">>>>>>>>>>>>>>>>>"
-          echo "Build Completed!
-          echo ${{ secrets.MY_SEC }}
+          echo "Build Completed!"
+          echo "Secret is: ${{ secrets.MY_SEC }}"
           echo ">>>>>>>>>>>>>>>>>"
 
   test:
@@ -66,4 +66,4 @@ jobs:
       - name: Closing statement
         run: |
           echo "Test Job completed"
-          echo $SOME_MESSAGE
+          echo "Message: $SOME_MESSAGE"
