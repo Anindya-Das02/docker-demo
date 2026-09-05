@@ -23,6 +23,7 @@ jobs:
         run: echo "Build Job completed"
 
   test:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
