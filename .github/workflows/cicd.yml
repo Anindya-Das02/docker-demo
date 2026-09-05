@@ -1,0 +1,41 @@
+name: Build, Test Separate Job
+
+on:
+  push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Compile & Build Project
+        run: mvn clean package -DskipTests
+
+      - name: Closing statement
+        run: echo "Build Job completed"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Run Tests
+        run: mvn clean test
+
+      - name: Closing statement
+        run: echo "Test Job completed"
