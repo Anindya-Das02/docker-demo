@@ -1,0 +1,98 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:            # manual trigger: "Run workflow" button
+    inputs:
+      bump:
+        description: "Release type"
+        required: true
+        type: choice
+        options: [patch, minor, major, custom]
+        default: patch
+      custom_version:
+        description: "Only used if type = custom (e.g. 2.5.0)"
+        required: false
+        type: string
+
+permissions:
+  contents: write               # needed to push commits/tags and create releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history + tags
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Calculate versions
+        id: v
+        env:
+          BUMP: ${{ inputs.bump }}
+          CUSTOM: ${{ inputs.custom_version }}
+        run: |
+          CURRENT=$(mvn -B -q -DforceStdout help:evaluate -Dexpression=project.version)
+          BASE=${CURRENT%-SNAPSHOT}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+
+          case "$BUMP" in
+            major)  RELEASE="$((MAJOR+1)).0.0" ;;
+            minor)  RELEASE="${MAJOR}.$((MINOR+1)).0" ;;
+            patch)  RELEASE="$BASE" ;;
+            custom) RELEASE="$CUSTOM" ;;
+          esac
+
+          if ! [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: '$RELEASE' (expected X.Y.Z)"; exit 1
+          fi
+          if git rev-parse "v$RELEASE" >/dev/null 2>&1; then
+            echo "Tag v$RELEASE already exists"; exit 1
+          fi
+
+          IFS='.' read -r RM Rm Rp <<< "$RELEASE"
+          NEXT="${RM}.${Rm}.$((Rp+1))-SNAPSHOT"
+
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "next=$NEXT"       >> "$GITHUB_OUTPUT"
+          echo "Current: $CURRENT -> Release: $RELEASE -> Next: $NEXT"
+
+      - name: Set release version, build and test
+        run: |
+          mvn -B versions:set -DnewVersion=${{ steps.v.outputs.release }} -DgenerateBackupPoms=false
+          mvn -B clean verify
+
+      - name: Commit release version and tag
+        run: |
+          git commit -am "Release ${{ steps.v.outputs.release }}"
+          git tag -a "v${{ steps.v.outputs.release }}" -m "Release ${{ steps.v.outputs.release }}"
+
+      - name: Bump to next SNAPSHOT
+        run: |
+          mvn -B versions:set -DnewVersion=${{ steps.v.outputs.next }} -DgenerateBackupPoms=false
+          git commit -am "Prepare next development iteration ${{ steps.v.outputs.next }}"
+
+      - name: Push commits and tag
+        run: |
+          git push origin HEAD:${{ github.ref_name }}
+          git push origin "v${{ steps.v.outputs.release }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ steps.v.outputs.release }}" target/*.jar \
+            --title "v${{ steps.v.outputs.release }}" \
+            --generate-notes
